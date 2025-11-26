@@ -111,6 +111,14 @@ void loop() {
 
   long current = millis();
 
+  if( targerSteer == 'R' ) {
+    targetPWMA = targetPWMA - targetSteerPercent;
+  } else if ( targerSteer == 'L' ) {
+    targetPWMB = targetPWMB - targetSteerPercent;
+  }
+
+  
+
   //============================== S P E E D   C O N T R O L   B L O C K ================ >>
   if( current - lastRampMillis > rampIntervalMs ) {
     transistion( APWM, targetPWMA, driverDriveA, targetDriveA );
