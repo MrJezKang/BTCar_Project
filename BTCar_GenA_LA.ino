@@ -5,36 +5,45 @@ BluetoothSerial BT;
 #define PWMA 13
 #define AIN2 15
 #define AIN1 32
-#define STBY 14
+#define PWMB 14
+#define BIN2 27
+#define BIN1 26
+
+char driverDriveA = 'F';
+char targetDriveA = 'F';
+char driverDriveB = 'F';
+char targetDriveB = 'F';
+
+char targerSteer = 'R';
 
 int throttle = 0;
 int steerPercent = 0;
-char directions[5];
 bool breakActive = false;
-bool instantMode = false;
+bool instantMode = true;
 bool isStill = true;
-int PWM = 0;
+int APWM = 0;
+int BPWM = 0;
 long lastRampMillis = 0;
-const long rampIntervalMs = 500;
+const long rampIntervalMs = 10;
+long lastPrintMillis = 0;
+bool printSerial = true;
 
 //====================================================================================================================================================
 
 
 void setup() {
 
-  Serial.begin ( 115200 );
-  BT.begin ( "Chinese.SurvalanceDrone.Thetta-01" );
+  Serial.begin( 115200 );
+  BT.begin( "BTCar_GenA_LA" );
 
-  pinMode ( PWMA , OUTPUT );
-  pinMode ( AIN2 , OUTPUT );
-  pinMode ( AIN1 , OUTPUT );
-  pinMode ( STBY , OUTPUT );
+  pinMode( PWMA , OUTPUT );
+  pinMode( AIN2 , OUTPUT );
+  pinMode( AIN1 , OUTPUT );
+  pinMode( PWMB , OUTPUT );
+  pinMode( BIN2 , OUTPUT );
+  pinMode( BIN1 , OUTPUT );
 
-  digitalWrite ( STBY , HIGH );
-
-  directions[4] = '\0';
-
-  Serial.println ( " <---- Chinese.SurvalanceDrone.Thetta-01 ----> " );
+  Serial.println( " <---- BTCar_GenA_LA ----> " );
 
 }
 
@@ -45,112 +54,180 @@ void setup() {
 void loop() {
 
 //============================== B L U E T O O T H   D A T A   B L O C K =============== >>
-  if (BT.available()) {
+  if(BT.available()) {
     char data = BT.read();
 
-    Serial.print( "Inbound : " + String(data) + "\t\t" );
-    
     // ========================== D A T A   ! B L A N K ================================
-    if ( data != '\n' && data != '\r' && data != ' ' && data != 0 ) {
+    if( data != '\n' && data != '\r' && data != ' ' && data != 0 ) {
 
       // ======================== L O G I C   C H E C K ================================ >>
-      if ( data == 'W' ) breakActive = true;
-      else if ( data == 'w' ) breakActive = false;
+      if( data == 'W' ) breakActive = true;
+      else if( data == 'w' ) breakActive = false;
       
-      if ( data == 'Z' ) instantMode = !instantMode;
+      if( data == 'Z' ) instantMode = !instantMode;
       // ======================== L O G I C   C H E C K ================================ <<
 
       // ======================== G E T   M O V E M E N T ============================== >>
-      if ( data == 'F' || data == 'B' ) {
+      if( data == 'F' || data == 'B' ) {
 
-        directions[0] = data; 
+        targetDriveA = data; 
+        targetDriveB = data;
 
-        String throttle_value = "";
-        String steerPercent_Value = "";
+        String placeHolder = "";
 
-        for ( int i = 0 ; i < 2 ; i++ ) {
+        for( int i = 0 ; i < 2 ; i++ ) {
           char x = BT.read();
-          throttle_value = throttle_value + x;
+          placeHolder = placeHolder + x;
         }
+
+        throttle = placeHolder.toInt();
+
+        placeHolder = "";
 
         data = BT.read();
-        directions[1] = data;
 
-        for ( int i = 0 ; i < 2 ; i++ ) {
+        targerSteer = data;
+
+        for( int i = 0 ; i < 2 ; i++ ) {
           char x = BT.read();
-          steerPercent_Value = steerPercent_Value + x;
+          placeHolder = placeHolder + x;
         }
 
-        throttle = throttle_value.toInt();
-        steerPercent = steerPercent_Value.toInt();
+        steerPercent = placeHolder.toInt();
 
       }
       // ======================== G E T   M O V E M E N T ============================== <<
-
-      Serial.print( "Acceleration : " + String( throttle ) + String( directions[0] ) + "\t\t" );
-      Serial.print( "steerPercent : " + String( steerPercent ) + String( directions[1] ) + "\t\t" );
-      Serial.print( "breakActive : " + String( breakActive ) + "\t\t" );
-      Serial.print( "Instant : " + String( instantMode ) + "\t\t" );
-      Serial.println();
       
     }
 
   }
   //============================== B L U E T O O T H   D A T A   B L O C K ============== <<
   
-  int targetPwm = map( throttle , 0 , 99 , 0 , 255 );
-  int targetSteerPercent = map ( steerPercent , 0 , 60 , 0 , 255 );
+  int targetPWMA = map( throttle , 0 , 99 , 0 , 255 );
+  int targetPWMB = map( throttle , 0 , 99 , 0 , 255 );
+  int targetSteerPercent = map( steerPercent , 0 , 60 , 0 , 255 );
 
   long current = millis();
 
   //============================== S P E E D   C O N T R O L   B L O C K ================ >>
-  if ( breakActive && targetPwm == 0 ) {
-    directions[2] = directions[0];
-    PWM = 0;
-  }
-  else if( !instantMode ) {
-    if( isStill ) {
-      directions[2] = directions[0];
-      isStill = ( targetPwm == 0 );
-    } else {
-      if ( directions[2] == directions[0] ) {
-        if( ( current - lastRampMillis
-       ) > ( rampIntervalMs ) ) {
-          lastRampMillis
-         = current;
-          if ( PWM > targetPwm ) PWM--;
-          else if ( PWM < targetPwm ) PWM++;
-        }
-      } else if ( directions[2] != directions[0] || targetPwm == 0 ) {
-        if ( PWM > 0 ) PWM--;
-        else {
-          isStill = ( targetPwm == 0 );
-          directions[2] = directions[0];
-        }
-      }
-    }
-  } else {
-    directions[2] = directions[0];
-    PWM = targetPwm;
+  // if ( instantMode ) {
+  //   driverDriveA = targetDriveA;
+  //   driverDriveB = targetDriveB;
+  //   APWM = targetPwmA;
+  //   BPWM = targetPWMB
+  // } else {
+  //   if ( isStill ) {
+  //     directions[2] = directions[0];
+  //     isStill = ( targetPwm == 0 );
+  //   } else {
+  //     if ( directions[2] == directions[0] ) {
+  //       if ( current - lastRampMillis >= rampIntervalMs ) {
+  //         if ( PWM > targetPwm ) PWM--;
+  //         else if ( PWM < targetPwm ) PWM++;
+  //         lastRampMillis = current;
+  //       }
+  //     } else if ( current - lastRampMillis >= rampIntervalMs ) {
+  //       if ( PWM > 0 ) PWM--;
+  //       else isStill = true;
+  //       lastRampMillis = current;
+  //     }
+  //   }
+  // }
+
+  if( current - lastRampMillis > rampIntervalMs ) {
+    transistion( APWM, targetPWMA, driverDriveA, targetDriveA );
+    transistion( BPWM, targetPWMB, driverDriveB, targetDriveB );
+    lastRampMillis = current;
   }
   //============================== S P E E D   C O N T R O L   B L O C K ================ <<
 
-  if ( PWM != 0 ) {
-  if ( directions[2] == 'F' ) {
-  digitalWrite ( AIN1 , HIGH );
-  digitalWrite ( AIN2 , LOW );
-  } else { 
-    digitalWrite ( AIN1 , LOW ); 
-    digitalWrite ( AIN2 , HIGH );
+  if( APWM == 0 ) breakActive ? A( 0b11 ) : A( 0b00 );
+  else (driverDriveA == 'F' ) ? A( 0b10 ) : A( 0b01 );
+
+  if( BPWM == 0 ) breakActive ? B( 0b11 ) : B( 0b00 );
+  else (driverDriveB == 'F' ) ? B( 0b10 ) : B( 0b01 );
+  
+  
+  analogWrite( PWMA , APWM );
+  analogWrite( PWMB , BPWM );
+
+  
+  if ( current - lastPrintMillis > 100 ) {
+    lastPrintMillis = current;
+    printSerial = true;
   }
-  } else {
-    digitalWrite( AIN1 , breakActive ? HIGH : LOW );
-    digitalWrite( AIN2 , breakActive ? HIGH : LOW );
+
+  if( printSerial ) {
+    // Format : isStill, instantMode , breakActive , driverDriveA/B, A/B PWM
+    Serial.print( isStill + String( " " ) );
+    Serial.print( instantMode + String( " " ) );
+    Serial.print( breakActive + String( " " ) );
+
+    Serial.print( driverDriveA );
+    Serial.print( ( ( APWM < 10 ) ? ( "00" + String( APWM ) ) : ( APWM < 100 )  ? ( "0" + String( APWM ) ) : String( APWM ) ) + " " );
+    Serial.println(); 
+    printSerial = false;
   }
- 
-  analogWrite ( PWMA , PWM );
 
 }
 
 
 //====================================================================================================================================================
+
+
+void transistion( int &PWM, int targetPWM, char &drive, char targetDrive ) {
+  if ( instantMode ) {
+    drive = targetDrive;
+    PWM = targetPWM;
+  } else {
+    if ( drive == targetDrive ) {
+      if ( PWM > targetPWM ) PWM--;
+      else if ( PWM < targetPWM ) PWM++;
+    } else {
+      if ( PWM > 0 ) PWM--;
+      else drive = targetDrive;
+    }
+  }
+}
+
+void A( int bit ) {
+  switch ( bit ) {
+    case 0b10:
+      digitalWrite( AIN1, HIGH );
+      digitalWrite( AIN2, LOW );
+      break;
+    case 0b01:
+      digitalWrite( AIN1, LOW );
+      digitalWrite( AIN2, HIGH );
+      break;
+    case 0b11:
+      digitalWrite( AIN1, HIGH );
+      digitalWrite( AIN2, HIGH );
+      break;
+    case 0b00:
+      digitalWrite( AIN1, LOW );
+      digitalWrite( AIN2, LOW );
+      break;
+  }
+}
+
+void B( int bit ) {
+  switch ( bit ) {
+    case 0b10:
+      digitalWrite( BIN1, HIGH );
+      digitalWrite( BIN2, LOW );
+      break;
+    case 0b01:
+      digitalWrite( BIN1, LOW );
+      digitalWrite( BIN2, HIGH );
+      break;
+    case 0b11:
+      digitalWrite( BIN1, HIGH );
+      digitalWrite( BIN2, HIGH );
+      break;
+    case 0b00:
+      digitalWrite( BIN1, LOW );
+      digitalWrite( BIN2, LOW );
+      break;
+  }
+}
