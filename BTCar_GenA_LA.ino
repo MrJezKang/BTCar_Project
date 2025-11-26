@@ -18,15 +18,17 @@ char targerSteer = 'R';
 
 int throttle = 0;
 int steerPercent = 0;
-bool breakActive = false;
-bool instantMode = true;
-bool isStill = true;
 int APWM = 0;
 int BPWM = 0;
+
+bool breakActive = false;
+bool instantMode = true;
+
 long lastRampMillis = 0;
 const long rampIntervalMs = 10;
 long lastPrintMillis = 0;
 bool printSerial = true;
+
 
 //====================================================================================================================================================
 
@@ -110,30 +112,6 @@ void loop() {
   long current = millis();
 
   //============================== S P E E D   C O N T R O L   B L O C K ================ >>
-  // if ( instantMode ) {
-  //   driverDriveA = targetDriveA;
-  //   driverDriveB = targetDriveB;
-  //   APWM = targetPwmA;
-  //   BPWM = targetPWMB
-  // } else {
-  //   if ( isStill ) {
-  //     directions[2] = directions[0];
-  //     isStill = ( targetPwm == 0 );
-  //   } else {
-  //     if ( directions[2] == directions[0] ) {
-  //       if ( current - lastRampMillis >= rampIntervalMs ) {
-  //         if ( PWM > targetPwm ) PWM--;
-  //         else if ( PWM < targetPwm ) PWM++;
-  //         lastRampMillis = current;
-  //       }
-  //     } else if ( current - lastRampMillis >= rampIntervalMs ) {
-  //       if ( PWM > 0 ) PWM--;
-  //       else isStill = true;
-  //       lastRampMillis = current;
-  //     }
-  //   }
-  // }
-
   if( current - lastRampMillis > rampIntervalMs ) {
     transistion( APWM, targetPWMA, driverDriveA, targetDriveA );
     transistion( BPWM, targetPWMB, driverDriveB, targetDriveB );
@@ -147,7 +125,6 @@ void loop() {
   if( BPWM == 0 ) breakActive ? B( 0b11 ) : B( 0b00 );
   else (driverDriveB == 'F' ) ? B( 0b10 ) : B( 0b01 );
   
-  
   analogWrite( PWMA , APWM );
   analogWrite( PWMB , BPWM );
 
@@ -158,13 +135,16 @@ void loop() {
   }
 
   if( printSerial ) {
-    // Format : isStill, instantMode , breakActive , driverDriveA/B, A/B PWM
-    Serial.print( isStill + String( " " ) );
+    // Format : instantMode , breakActive , driverDriveA/B, A/B PWM
     Serial.print( instantMode + String( " " ) );
     Serial.print( breakActive + String( " " ) );
 
     Serial.print( driverDriveA );
+    Serial.print( driverDriveB + String( " " ) );
     Serial.print( ( ( APWM < 10 ) ? ( "00" + String( APWM ) ) : ( APWM < 100 )  ? ( "0" + String( APWM ) ) : String( APWM ) ) + " " );
+    Serial.print( ( ( BPWM < 10 ) ? ( "00" + String( BPWM ) ) : ( BPWM < 100 )  ? ( "0" + String( BPWM ) ) : String( BPWM ) ) + " " );
+    Serial.print( targerSteer + String( " " ) );
+    Serial.print( ( ( targetSteerPercent < 10 ) ? ( "00" + String( targetSteerPercent ) ) : ( targetSteerPercent < 100 )  ? ( "0" + String( targetSteerPercent ) ) : String( targetSteerPercent ) ) + " " );
     Serial.println(); 
     printSerial = false;
   }
