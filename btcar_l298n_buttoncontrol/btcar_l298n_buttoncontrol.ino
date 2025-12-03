@@ -1,5 +1,7 @@
 #include "BluetoothSerial.h"
 
+#define Bluetooth "BTCar" // Bluetooth Name !
+
 #define n1 33
 #define n2 25
 #define n3 26
@@ -10,15 +12,15 @@
 BluetoothSerial BT;
 
 void setup() {
-  Serial.begin(115200);
-  BT.begin("NAME HERE"); // Bluetooth Name !!!!!!!!!!!!!!!!!!!!!!
+  Serial.begin( 115200 );
+  BT.begin( Bluetooth );
 
-  pinMode(n1, OUTPUT);
-  pinMode(n2, OUTPUT);
-  pinMode(n3, OUTPUT);
-  pinMode(n4, OUTPUT);
-  pinMode(PWMA, OUTPUT);
-  pinMode(PWMB, OUTPUT);
+  pinMode( n1, OUTPUT );
+  pinMode( n2, OUTPUT );
+  pinMode( n3, OUTPUT );
+  pinMode( n4, OUTPUT );
+  pinMode( PWMA, OUTPUT );
+  pinMode( PWMB, OUTPUT );
 }
 
 char command = "S";
@@ -26,15 +28,12 @@ char command = "S";
 void loop() {
 
   // Read incoming Bluetooth data
-  if (BT.available()) {
+  if ( BT.available() ) {
     char data = BT.read();
-        if (data != '\n' && data != '\r' && data != ' ' && data != 0) {
+        if( data != '\n' && data != '\r' && data != ' ' && data != 0 ) { // check if blank
         command = data;   // <-- store and REMEMBER last command
     }
   }
-
-  Serial.print("Start: ");
-  Serial.print(command);
 
   switch (command) {
 
@@ -75,24 +74,18 @@ void loop() {
       break;
   }
 
-  
-    Serial.print(" END: ");
-    Serial.print(command);
-
-    Serial.println();
-
-    analogWrite(PWMA, 255); // Set motor speed (0-255)
-    analogWrite(PWMB, 255); // Set motor speed (0-255)
+    analogWrite( PWMA , 255 ); // Set motor speed (0-255)
+    analogWrite( PWMB , 255 ); // Set motor speed (0-255)
 }
 
-void n1_on(){ digitalWrite(n1, HIGH); }
-void n1_off(){ digitalWrite(n1, LOW); }
+void n1_on(){ digitalWrite( n1 , HIGH ); }
+void n1_off(){ digitalWrite( n1 , LOW ); }
 
-void n2_on(){ digitalWrite(n2, HIGH); }
-void n2_off(){ digitalWrite(n2, LOW); }
+void n2_on(){ digitalWrite( n2 , HIGH ); }
+void n2_off(){ digitalWrite( n2 , LOW ); }
 
-void n3_on(){ digitalWrite(n3, HIGH); }
-void n3_off(){ digitalWrite(n3, LOW); }
+void n3_on(){ digitalWrite( n3 , HIGH ); }
+void n3_off(){ digitalWrite( n3 , LOW ); }
 
-void n4_on(){ digitalWrite(n4, HIGH); }
-void n4_off(){ digitalWrite(n4, LOW); }
+void n4_on(){ digitalWrite( n4 , HIGH ); }
+void n4_off(){ digitalWrite( n4 , LOW ); }
