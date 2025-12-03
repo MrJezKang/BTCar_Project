@@ -13,19 +13,23 @@ BluetoothSerial BT;
 #define PWMB 14 
 #define BIN1 27 
 #define BIN2 26 
-#define STBY 
+#define STBY 33
 
 // ========================== C O N T R O L   V A R I A B L E S ========================== 
+
+#define Forward 0b10
+#define Backward 0b01
+#define Short 0b11
+#define Coast 0b00
+
+#define SpeedCap 255
 
 char driverDriveA = 'F';
 char targetDriveA = 'F';
 char driverDriveB = 'F';
 char targetDriveB = 'F';
-char targerSteer = 'R';
+char targetSteer = 'R';
 
-
-let prepherals = 8b0000010;
-// parkingBreak , speedMode , headLights
 bool parkingBreak = false;
 bool speedMode = false;
 bool headLights = false;
@@ -35,11 +39,11 @@ int throttle = 0;
 int steerPercent = 0;
 int APWM = 0;
 int BPWM = 0;
-int speedCap = 255;
+int speed = 0;
 
 // ===================== R A M P   C O N T R O L   V A R I A B L E S =====================
-long lastRampMillis = 0;
-long rampIntervalsControl = 5;
+long lastRampMillisA = 0;
+long lastRampMillisB = 0;
 long lastPrintMillis = 0;
 
 
@@ -59,7 +63,16 @@ void setup() {
   pinMode( BIN2 , OUTPUT );
   pinMode( STBY , OUTPUT );
 
-  digitalWrite( STBY , HIGH );
+  digitalWrite( STBY , HIGH ); // enable motor driver
+
+  // Motor A PWM
+  ledcSetup(0, 20000, 8);      // Channel 0, 20 kHz, 8-bit resolution
+  ledcAttachPin(PWMA, 0);      // Attach Motor A PWM pin
+
+  // Motor B PWM
+  ledcSetup(1, 20000, 8);      // Channel 1, 20 kHz, 8-bit resolution
+  ledcAttachPin(PWMB, 1);      // Attach Motor B PWM pin
+
 
 }
 
@@ -69,6 +82,9 @@ void setup() {
 
 
 void loop() {
+
+  
+
 // ======================= B L U E T O O T H   D A T A   B L O C K ======================= >>
   if(BT.available()) {
     char data = BT.read();
@@ -76,12 +92,12 @@ void loop() {
     // ============================== D A T A   ! B L A N K ==============================
     if( data != '\n' && data != '\r' && data != ' ' && data != 0 ) {
 
-      
-
       // ============================= L O G I C   C H E C K ============================= >>
       if( data == 'W' ) parkingBreak = true;
       else if( data == 'w' ) parkingBreak = false;
       if( data == 'Z' ) speedMode = !speedMode;
+
+      speedMode ? speed = SpeedCap : speed = SpeedCap / 2;
 
       // ============================ G E T   M O V E M E N T ============================ >>
       if( data == 'F' || data == 'B' ) {
@@ -102,7 +118,7 @@ void loop() {
 
         data = BT.read();
 
-        targerSteer = data;
+        targetSteer = data;
 
         for( int i = 0 ; i < 2 ; i++ ) {
           char x = BT.read();
@@ -122,50 +138,76 @@ void loop() {
   long current = millis();
 
 // ================ M O T O R   S P E E D   /   S T E E R   C O N T R O L ================ >>
-  int targetPWMA = map( throttle , 0 , 99 , 0 , speedCap );
-  int targetPWMB = map( throttle , 0 , 99 , 0 , speedCap );
-  int targetSteerPercent = map( steerPercent , 0 , 60 , 0 , speedCap );
+  int targetPWMA = map( throttle , 0 , 99 , 0 , speed );
+  int targetPWMB = map( throttle , 0 , 99 , 0 , speed );
+  int targetSteerPercent = map( steerPercent , 0 , 60 , 0 , speed );
+
+  ( targetPWMA > 0 || targetPWMB > 0 ) ? canTurnOnSpot = true : ( ( targetPWMA == 0 && targetPWMB == 0 ) && ( targetSteerPercent == 0 ) ? canTurnOnSpot = true : canTurnOnSpot = false );
 
   // Adjust motor speeds based on steering direction
-  if( targerSteer == 'R' ) {
+  if( targetSteer == 'R' ) {
     targetPWMB = targetPWMB - targetSteerPercent;
     targetPWMA = targetPWMA + targetSteerPercent;
-  } else if ( targerSteer == 'L' ) {
+  } else if ( targetSteer == 'L' ) {
     targetPWMA = targetPWMA - targetSteerPercent;
     targetPWMB = targetPWMB + targetSteerPercent;
   }
 
-  // Handle reverse direction
-  if( targetPWMA < 0 ) {
-    targetDriveA = 'B';
-    targetPWMA = targetPWMA * -1;
+  // Handle On Spot turn direction
+  if ( canTurnOnSpot ) {
+    if( targetPWMA < 0 ) {
+      targetDriveA = 'B';
+      targetPWMA = -targetPWMA;  // make positive
+    }
+    if( targetPWMB < 0 ) {
+      targetDriveB = 'B';
+      targetPWMB = -targetPWMB;  // make positive
+    }
+  } else {
+    targetPWMA = constrain(targetPWMA, 0, speed);
+    targetPWMB = constrain(targetPWMB, 0, speed);
   }
-  if( targetPWMB < 0 ) {
-    targetDriveB = 'B';
-    targetPWMB = targetPWMB * -1;
-  }
+  
 
   // Cap at 255
-  if( targetPWMA >= speedCap ) targetPWMA  = speedCap;
-  if( targetPWMB >= speedCap ) targetPWMB = speedCap;
+  if( targetPWMA >= speed ) targetPWMA  = speed;
+  if( targetPWMB >= speed ) targetPWMB = speed;
+
+
+
+  int rampIntervalsControlA = map(abs(APWM), 0, 255, 10, 2);  // closer to 0 → slower
+  int rampIntervalsControlB = map(abs(BPWM), 0, 255, 10, 2);
+
+  int rampIntervalsControlA = constrain(rampIntervalsControlA, 2, 10);
+  int rampIntervalsControlB = constrain(rampIntervalsControlB, 2, 10);
 
   // Ramp motor speeds
-  if( current - lastRampMillis > rampIntervalsControl ) {
+  if( current - lastRampMillisA > rampIntervalsControlA ) {
     transistion( APWM, targetPWMA , driverDriveA, targetDriveA );
+    lastRampMillisA = current;
+  }
+   if( current - lastRampMillisB > rampIntervalsControlB ) {
     transistion( BPWM, targetPWMB, driverDriveB, targetDriveB );
-    lastRampMillis = current;
+    lastRampMillisB = current;
   }
 // ================ M O T O R   S P E E D   /   S T E E R   C O N T R O L ================ <<
 
 // ================== M O T O R   D R I V E   C O N T R O L   B L O C K ================== >>
-  if( APWM == 0 ) parkingBreak ? A( 0b11 ) : A( 0b00 );
-  else (driverDriveA == 'F' ) ? A( 0b10 ) : A( 0b01 );
-
-  if( BPWM == 0 ) parkingBreak ? B( 0b11 ) : B( 0b00 );
-  else (driverDriveB == 'F' ) ? B( 0b10 ) : B( 0b01 );
+  if ( APWM == 0 && BPWM == 0 ) {
+    if ( parkingBreak ) {
+      MotorControl( Short , AIN1 , AIN2 );
+      MotorControl( Short , BIN1 , BIN2 );
+    } else {
+      MotorControl( Coast , AIN1 , AIN2 );
+      MotorControl( Coast , BIN1 , BIN2 );
+    }
+  } else {
+    (driverDriveA == 'F' ) ? MotorControl( Forward , AIN1 , AIN2 ) : MotorControl( Backward , AIN1 , AIN2 );
+    (driverDriveB == 'F' ) ? MotorControl( Forward , BIN1 , BIN2 ) : MotorControl( Backward , BIN1 , BIN2 );
+  }
   
-  analogWrite( PWMA  , APWM );
-  analogWrite( PWMB , BPWM );
+  ledcWrite( 0 , APWM );
+  ledcWrite( 1 , BPWM );
 // ================== M O T O R   D R I V E   C O N T R O L   B L O C K ================== <<
 
 // ========================= S E R I A L   P R I N T   B L O C K ========================= >>
@@ -176,12 +218,12 @@ void loop() {
     Serial.print( speedMode + String( " " ) );
     Serial.print( parkingBreak + String( " " ) );
 
-    // Format : driverDriveA , driverDriveB , APWM , BPWM , targerSteer , targetSteerPercent
+    // Format : driverDriveA , driverDriveB , APWM , BPWM , targetSteer , targetSteerPercent
     Serial.print( driverDriveA );
     Serial.print( driverDriveB + String( " " ) );
     Serial.print( ( ( APWM < 10 ) ? ( "00" + String( APWM ) ) : ( APWM < 100 )  ? ( "0" + String( APWM ) ) : String( APWM ) ) + " " );
     Serial.print( ( ( BPWM < 10 ) ? ( "00" + String( BPWM ) ) : ( BPWM < 100 )  ? ( "0" + String( BPWM ) ) : String( BPWM ) ) + " " );
-    Serial.print( targerSteer + String( " " ) );
+    Serial.print( targetSteer + String( " " ) );
     Serial.print( ( ( targetSteerPercent < 10 ) ? ( "00" + String( targetSteerPercent ) ) : ( targetSteerPercent < 100 )  ? ( "0" + String( targetSteerPercent ) ) : String( targetSteerPercent ) ) + " " );
     Serial.println(); 
   }
@@ -194,62 +236,18 @@ void loop() {
 
 // Ramp function
 void transistion( int &PWM, int targetPWM, char &drive, char targetDrive ) {
-  if ( speedMode ) {
-    drive = targetDrive;
-    PWM = targetPWM;
+  if ( drive == targetDrive ) {
+    if ( PWM > targetPWM ) PWM--;
+    else if ( PWM < targetPWM ) PWM++;
   } else {
-    if ( drive == targetDrive ) {
-      if ( PWM > targetPWM ) PWM--;
-      else if ( PWM < targetPWM ) PWM++;
-    } else {
-      if ( PWM > 0 ) PWM--;
-      else drive = targetDrive;
-    }
+    if ( PWM > 0 ) PWM--;
+    else drive = targetDrive;
   }
 }
 
-/*  MotorControl() Function – Sets Motor Direction via Motor Driver
-    Supports: LN298, TB6612FNG (logic-level input)
-    WARNING: DO NOT CONNECT DC MOTOR DIRECTLY TO ESP32 GPIO  
-
-    Parameters:
-      control: 2-bit decode for controlling direction
-        Use Defined Constrains for ease of Control if existing:
-          #define Forward   0b10  >>  A=HIGH, B=LOW
-          #define Backward  0b01  >>  A=LOW,  B=HIGH
-          #define Short     0b11  >>  A=HIGH, B=HIGH
-          #define Coast     0b00  >>  A=LOW,  B=LOW
-      ControlA : Motor Driver DC Motor Direction Control In A
-      ControlB : Motor Driver DC Motor Direction Control In B
-
-    Usage Example:
-      MotorControl(Forward, AIN1, AIN2);  Using Defined Constrains 
-      MotorControl(0b10, 15, 32);         Using Raw Input
-      MotroControl(Forward, 15, 32);      Using Mixed
-
-    Notes:
-      - uint8_t = 8-bit / 1-byte unsigned integer
-      - gpio_set_level() = digitalWrite();
-      - gpio_set_level() is ESP32-specific; pin must be configured as OUTPUT
-      - Faster than digitalWrite();
-      - Safe when logic-level inputs only
-
-    Truth Table:
-      Control  | Control  A | Control  B |   Action
-      -----------------------------------------------
-       0b00    |    LOW     |    LOW     |   Coast
-       0b01    |    LOW     |    HIGH    |   Backward
-       0b10    |    HIGH    |    LOW     |   Forward
-       0b11    |    HIGH    |    HIGH    |   Short
-
-    Operation:
-      ( Control >> 1 ) & 1; ( <byte> <shift operation> <shift to what index> ) <and operation> <mask> ;
-        Bit Shift Control 0b10 > 0b01
-        then oprate and operation 0b01 & 0b01 > return 1 == HIGH;
-*/
-void MotorControl(uint8_t control, uint8_t controlA, uint8_t controlB) {
-    gpio_set_level(controlA, ( control >> 1 ) & 1);
-    gpio_set_level(controlB, control & 1);
+void MotorControl( int control , int controlA , int controlB ) {
+    digitalWrite( controlA , ( control >> 1 ) & 1 );
+    digitalWrite( controlB , control & 1 );
 }
 
 //====================================================   F   U   N   C   T   I   O   N   S   ==================================================== <<
