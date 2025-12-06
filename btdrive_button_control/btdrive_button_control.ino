@@ -11,18 +11,22 @@
 // BIN1 / BIN2  →   motor B direction control
 // PWMA / BIN2  →   Motor speed control (PWM)
 // STBY         →   Enable Driver Module
-#define PWMA 32
-#define AIN1 33
-#define AIN2 25
+#define PWMA 27
+#define AIN1 18
+#define AIN2 19
 #define PWMB 14
-#define BIN1 26
-#define BIN2 27
-#define STBY 13
+#define BIN1 21
+#define BIN2 32
+#define STBY 33
 
 #define Forward  0b10
 #define Backward 0b01
 #define Short    0b11
 #define Close    0b00
+
+#define ledOn 13
+
+long lastTime = 0;
 
 BluetoothSerial BT;
 
@@ -59,6 +63,8 @@ void setup() {
   pinMode( BIN2, OUTPUT );
   pinMode( STBY, OUTPUT );
 
+  pinMode( ledOn , OUTPUT );
+
   ledcSetup(0, 20000, 8);    
   ledcAttachPin(PWMA, 0);
   ledcSetup(1, 20000, 8);
@@ -71,6 +77,11 @@ void setup() {
 uint8_t command = 'S';
 
 void loop() {
+
+  if( millis() - lastTime > 1000 ) {
+    lastTime = millis();
+    digitalWrite( ledOn , !digitalRead( ledOn ) ); // blink LED
+  }
 
   // Read incoming Bluetooth data
   if ( BT.available() != 0 ) {
@@ -85,8 +96,6 @@ void loop() {
 
   ledcWrite( 0 , 255 );
   ledcWrite( 1 , 255 );
-
-  delay(1);
 
 }
 
