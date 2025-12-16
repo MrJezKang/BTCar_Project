@@ -4,13 +4,13 @@
 
 BluetoothSerial BT;
 
-#define PWMA 27
-#define AIN1 4
-#define AIN2 19
-#define PWMB 14
-#define BIN1 21
+#define PWMA 14
+#define AIN1 26
+#define AIN2 25
+#define PWMB 27
+#define BIN1 33
 #define BIN2 32
-#define STBY 33
+#define STBY 13
 
 #define PWM 225
 
@@ -42,7 +42,6 @@ void setup() {
   pinMode( 13 , OUTPUT );
 
   digitalWrite( STBY , HIGH );
-  digitalWrite( 13 , HIGH );
   delay( 1000 );
 
 }
@@ -60,15 +59,14 @@ void loop() {
           data == 'H' || data == 'G' || data == 'J' || data == 'I' ||
           data == 'S' ) command = data;
 
-      digitalWrite( 13 , HIGH ); // turn on LED when data received
 
     }
-  } else digitalWrite( 13 , LOW ); // turn off LED when no data
+  }
 
   uint8_t motor_bit = MotionTable(command);
   
   if( getBit( prerapherals , 0 ) ) defaultSpeed = PWM;
-  else defaultSpeed = PWM / 3;
+  else defaultSpeed = PWM / 2;
   
   MotorModuleControl( (motor_bit >> 2) & 0b11 , motor_bit & 0b11 );
 
